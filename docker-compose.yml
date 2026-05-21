@@ -1,0 +1,36 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cybertriage
+      POSTGRES_PASSWORD: cybertriage
+      POSTGRES_DB: cybertriage
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cybertriage"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://cybertriage:cybertriage@db:5432/cybertriage
+      SECRET_KEY: change-this-in-production-use-a-strong-random-key
+      # Optional: Add your AbuseIPDB key for real threat intel
+      # ABUSEIPDB_API_KEY: your_key_here
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - .:/app
+
+volumes:
+  pgdata:

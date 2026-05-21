@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CyberTriage SOC Dashboard</title>
+<style>
+  :root {
+    --bg: #0a0e1a; --surface: #111827; --surface2: #1a2235;
+    --border: #1e2d45; --text: #e2e8f0; --muted: #64748b;
+    --red: #ef4444; --orange: #f97316; --yellow: #eab308;
+    --green: #22c55e; --blue: #3b82f6; --purple: #a855f7;
+    --critical: #ef4444; --high: #f97316; --medium: #eab308; --low: #22c55e;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif; min-height:100vh; }
+
+  /* Layout */
+  .header { background:var(--surface); border-bottom:1px solid var(--border); padding:16px 28px;
+    display:flex; align-items:center; justify-content:space-between; }
+  .logo { display:flex; align-items:center; gap:10px; font-size:18px; font-weight:700; }
+  .logo-icon { width:32px; height:32px; background:linear-gradient(135deg,#ef4444,#7c3aed);
+    border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:16px; }
+  .badge { background:#7c3aed22; border:1px solid #7c3aed55; color:#a78bfa;
+    padding:3px 10px; border-radius:20px; font-size:12px; font-weight:600; }
+
+  .auth-wall { display:flex; align-items:center; justify-content:center; min-height:80vh; }
+  .auth-card { background:var(--surface); border:1px solid var(--border); border-radius:16px;
+    padding:40px; width:360px; }
+  .auth-card h2 { margin-bottom:24px; font-size:22px; }
+  .field { margin-bottom:16px; }
+  .field label { display:block; margin-bottom:6px; font-size:13px; color:var(--muted); font-weight:500; }
+  .field input { width:100%; background:var(--surface2); border:1px solid var(--border);
+    border-radius:8px; padding:10px 14px; color:var(--text); font-size:14px; outline:none;
+    transition:border 0.2s; }
+  .field input:focus { border-color:var(--blue); }
+  .btn { width:100%; padding:11px; border-radius:8px; border:none; cursor:pointer;
+    font-size:14px; font-weight:600; transition:opacity 0.2s; }
+  .btn-primary { background:linear-gradient(135deg,#3b82f6,#7c3aed); color:#fff; }
+  .btn-primary:hover { opacity:0.9; }
+  .btn-sm { width:auto; padding:6px 14px; font-size:13px; border-radius:6px; }
+  .btn-outline { background:transparent; border:1px solid var(--border); color:var(--text); }
+  .btn-outline:hover { border-color:var(--blue); color:var(--blue); }
+  .toggle-link { text-align:center; margin-top:16px; font-size:13px; color:var(--muted); cursor:pointer; }
+  .toggle-link span { color:var(--blue); cursor:pointer; }
+
+  .main { padding:28px; max-width:1400px; margin:0 auto; }
+  .top-bar { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; }
+  .top-bar h1 { font-size:22px; font-weight:700; }
+
+  /* Stat cards */
+  .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; margin-bottom:28px; }
+  .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px;
+    position:relative; overflow:hidden; }
+  .stat-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+  .stat-card.red::before { background:var(--red); }
+  .stat-card.orange::before { background:var(--orange); }
+  .stat-card.blue::before { background:var(--blue); }
+  .stat-card.green::before { background:var(--green); }
+  .stat-card.purple::before { background:var(--purple); }
+  .stat-label { font-size:12px; color:var(--muted); font-weight:500; text-transform:uppercase; letter-spacing:0.5px; }
+  .stat-value { font-size:36px; font-weight:800; margin-top:6px; }
+
+  /* Alerts table */
+  .section { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; margin-bottom:24px; }
+  .section-header { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; 
+    align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .section-header h2 { font-size:16px; font-weight:700; }
+  .filters { display:flex; gap:8px; flex-wrap:wrap; }
+  select.filter { background:var(--surface2); border:1px solid var(--border); color:var(--text);
+    padding:6px 10px; border-radius:6px; font-size:13px; cursor:pointer; }
+
+  table { width:100%; border-collapse:collapse; }
+  th { text-align:left; padding:10px 16px; font-size:11px; font-weight:600; text-transform:uppercase;
+    letter-spacing:0.5px; color:var(--muted); background:var(--surface2); }
+  td { padding:12px 16px; border-top:1px solid var(--border); font-size:13px; vertical-align:middle; }
+  tr:hover td { background:#ffffff05; }
+
+  .sev-badge { padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; text-transform:uppercase; }
+  .sev-critical { background:#ef444422; color:#ef4444; border:1px solid #ef444444; }
+  .sev-high     { background:#f9731622; color:#f97316; border:1px solid #f9731644; }
+  .sev-medium   { background:#eab30822; color:#eab308; border:1px solid #eab30844; }
+  .sev-low      { background:#22c55e22; color:#22c55e; border:1px solid #22c55e44; }
+
+  .status-badge { padding:3px 8px; border-radius:4px; font-size:11px; font-weight:600; }
+  .status-open          { background:#3b82f622; color:#3b82f6; }
+  .status-investigating { background:#a855f722; color:#a855f7; }
+  .status-resolved      { background:#22c55e22; color:#22c55e; }
+  .status-false_positive{ background:#64748b22; color:#64748b; }
+
+  .risk-bar { width:80px; height:6px; background:var(--surface2); border-radius:3px; display:inline-block; }
+  .risk-fill { height:100%; border-radius:3px; }
+
+  /* Triage form */
+  .triage-form { padding:20px; }
+  .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .form-grid .full { grid-column:1/-1; }
+  textarea { width:100%; background:var(--surface2); border:1px solid var(--border);
+    border-radius:8px; padding:10px 14px; color:var(--text); font-size:14px; resize:vertical;
+    font-family:monospace; outline:none; }
+  textarea:focus { border-color:var(--blue); }
+
+  .result-panel { background:var(--surface2); border:1px solid var(--border); border-radius:10px;
+    padding:20px; margin-top:16px; }
+  .result-row { display:flex; justify-content:space-between; padding:8px 0;
+    border-bottom:1px solid var(--border); font-size:13px; }
+  .result-row:last-child { border:none; }
+  .result-key { color:var(--muted); }
+  .result-val { font-weight:600; max-width:60%; text-align:right; }
+
+  .tag { display:inline-block; background:#3b82f622; color:#93c5fd; border:1px solid #3b82f633;
+    border-radius:4px; padding:2px 8px; font-size:11px; font-weight:600; }
+
+  .err { color:var(--red); font-size:13px; margin-top:8px; }
+  .spinner { display:inline-block; width:16px; height:16px; border:2px solid #ffffff44;
+    border-top-color:#fff; border-radius:50%; animation:spin 0.6s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  .empty { text-align:center; padding:40px; color:var(--muted); font-size:14px; }
+  .pulse { animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+  .nav-tabs { display:flex; gap:4px; margin-bottom:24px; }
+  .nav-tab { padding:8px 18px; border-radius:8px; font-size:14px; font-weight:500; cursor:pointer;
+    border:1px solid transparent; color:var(--muted); transition:all 0.2s; }
+  .nav-tab.active { background:var(--surface); border-color:var(--border); color:var(--text); }
+  .nav-tab:hover:not(.active) { color:var(--text); }
+
+  .mitre { font-family:monospace; font-size:12px; color:#a78bfa; }
+  .ip-flag { font-size:11px; color:var(--muted); margin-top:2px; }
+
+  .logout-btn { background:none; border:1px solid var(--border); color:var(--muted);
+    padding:6px 14px; border-radius:6px; cursor:pointer; font-size:13px; }
+  .logout-btn:hover { border-color:var(--red); color:var(--red); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">
+    <div class="logo-icon">🛡️</div>
+    CyberTriage
+    <span class="badge">SOC Platform</span>
+  </div>
+  <div id="header-right">
+    <button class="logout-btn" id="logout-btn" style="display:none" onclick="logout()">Logout</button>
+  </div>
+</div>
+
+<!-- AUTH WALL -->
+<div class="auth-wall" id="auth-wall">
+  <div class="auth-card">
+    <h2 id="auth-title">🔐 Sign In</h2>
+    <div class="field">
+      <label>Username</label>
+      <input type="text" id="auth-username" placeholder="analyst01" />
+    </div>
+    <div id="auth-email-wrap" class="field" style="display:none">
+      <label>Email</label>
+      <input type="email" id="auth-email" placeholder="analyst@company.com" />
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="auth-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')authSubmit()" />
+    </div>
+    <div class="err" id="auth-err"></div>
+    <button class="btn btn-primary" onclick="authSubmit()" style="margin-top:8px" id="auth-btn">Sign In</button>
+    <div class="toggle-link" id="auth-toggle">No account? <span onclick="toggleAuth()">Register</span></div>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div class="main" id="main-app" style="display:none">
+  <div class="top-bar">
+    <div>
+      <h1>SOC Dashboard</h1>
+      <div style="font-size:13px;color:var(--muted);margin-top:2px">Real-time alert triage & threat monitoring</div>
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="loadAll()">↻ Refresh</button>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-grid" id="stats-grid">
+    <div class="stat-card blue"><div class="stat-label">Total Alerts</div><div class="stat-value" id="s-total">—</div></div>
+    <div class="stat-card red"><div class="stat-label">Critical</div><div class="stat-value" id="s-critical">—</div></div>
+    <div class="stat-card orange"><div class="stat-label">High</div><div class="stat-value" id="s-high">—</div></div>
+    <div class="stat-card purple"><div class="stat-label">Open</div><div class="stat-value" id="s-open">—</div></div>
+    <div class="stat-card green"><div class="stat-label">Resolved Today</div><div class="stat-value" id="s-resolved">—</div></div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="nav-tabs">
+    <div class="nav-tab active" onclick="showTab('alerts',this)">📋 Alert Queue</div>
+    <div class="nav-tab" onclick="showTab('triage',this)">⚡ Submit Alert</div>
+  </div>
+
+  <!-- ALERT QUEUE TAB -->
+  <div id="tab-alerts">
+    <div class="section">
+      <div class="section-header">
+        <h2>Live Alert Queue</h2>
+        <div class="filters">
+          <select class="filter" id="f-severity" onchange="loadAlerts()">
+            <option value="">All Severities</option>
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+          <select class="filter" id="f-status" onchange="loadAlerts()">
+            <option value="">All Status</option>
+            <option value="open">Open</option>
+            <option value="investigating">Investigating</option>
+            <option value="resolved">Resolved</option>
+            <option value="false_positive">False Positive</option>
+          </select>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th><th>Source IP</th><th>Event Type</th><th>Tool</th>
+            <th>Severity</th><th>Risk</th><th>MITRE Technique</th><th>Status</th><th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="alerts-table-body">
+          <tr><td colspan="9" class="empty">Loading alerts...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TRIAGE TAB -->
+  <div id="tab-triage" style="display:none">
+    <div class="section">
+      <div class="section-header"><h2>⚡ Submit Security Alert for Triage</h2></div>
+      <div class="triage-form">
+        <div class="form-grid">
+          <div class="field">
+            <label>Source IP</label>
+            <input type="text" id="t-ip" placeholder="185.220.101.45" />
+          </div>
+          <div class="field">
+            <label>Tool Source</label>
+            <select class="filter" id="t-tool" style="width:100%;padding:10px 14px">
+              <option value="splunk">Splunk</option>
+              <option value="crowdstrike">CrowdStrike</option>
+              <option value="elk">ELK Stack</option>
+              <option value="qradar">QRadar</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Event Type</label>
+            <select class="filter" id="t-type" style="width:100%;padding:10px 14px">
+              <option value="brute_force">Brute Force</option>
+              <option value="sql_injection">SQL Injection</option>
+              <option value="xss">XSS</option>
+              <option value="privilege_escalation">Privilege Escalation</option>
+              <option value="lateral_movement">Lateral Movement</option>
+              <option value="data_exfiltration">Data Exfiltration</option>
+              <option value="malware">Malware Detected</option>
+              <option value="phishing">Phishing</option>
+              <option value="ransomware">Ransomware</option>
+              <option value="c2_beacon">C2 Beacon</option>
+              <option value="port_scan">Port Scan</option>
+              <option value="dos">DoS Attack</option>
+            </select>
+          </div>
+          <div class="field full">
+            <label>Raw Log Message</label>
+            <textarea id="t-log" rows="3" placeholder="47 failed SSH login attempts for root from 185.220.101.45 — threshold exceeded"></textarea>
+          </div>
+        </div>
+        <button class="btn btn-primary" style="width:auto;padding:10px 28px" onclick="submitTriage()" id="triage-btn">
+          Run Triage ⚡
+        </button>
+        <div class="err" id="triage-err"></div>
+
+        <div id="triage-result" style="display:none" class="result-panel">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <div style="font-size:16px;font-weight:700">Triage Decision</div>
+            <div id="r-severity-badge"></div>
+          </div>
+          <div class="result-row"><span class="result-key">Risk Score</span><span class="result-val" id="r-risk"></span></div>
+          <div class="result-row"><span class="result-key">MITRE Technique</span><span class="result-val mitre" id="r-mitre"></span></div>
+          <div class="result-row"><span class="result-key">MITRE Tactic</span><span class="result-val" id="r-tactic"></span></div>
+          <div class="result-row"><span class="result-key">IP Threat Score</span><span class="result-val" id="r-ip-score"></span></div>
+          <div class="result-row"><span class="result-key">IP Country</span><span class="result-val" id="r-country"></span></div>
+          <div class="result-row" style="border:none">
+            <span class="result-key">Recommended Action</span>
+            <span class="result-val" id="r-action" style="color:#fbbf24"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Update Status Modal -->
+<div id="modal" style="display:none;position:fixed;inset:0;background:#00000088;z-index:100;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;width:420px">
+    <h3 style="margin-bottom:20px">Update Alert #<span id="modal-id"></span></h3>
+    <div class="field">
+      <label>Status</label>
+      <select class="filter" id="modal-status" style="width:100%;padding:10px">
+        <option value="open">Open</option>
+        <option value="investigating">Investigating</option>
+        <option value="resolved">Resolved</option>
+        <option value="false_positive">False Positive</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Analyst Notes</label>
+      <textarea id="modal-notes" rows="3" placeholder="Confirmed malicious / False positive because..."></textarea>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button class="btn btn-primary" onclick="saveUpdate()">Save</button>
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const BASE = '';
+let token = localStorage.getItem('ct_token');
+let isRegister = false;
+let currentAlertId = null;
+
+function authHeader() {
+  return { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+}
+
+function toggleAuth() {
+  isRegister = !isRegister;
+  document.getElementById('auth-title').textContent = isRegister ? '📝 Register' : '🔐 Sign In';
+  document.getElementById('auth-email-wrap').style.display = isRegister ? 'block' : 'none';
+  document.getElementById('auth-btn').textContent = isRegister ? 'Create Account' : 'Sign In';
+  document.getElementById('auth-toggle').innerHTML = isRegister
+    ? 'Already have an account? <span onclick="toggleAuth()">Sign In</span>'
+    : 'No account? <span onclick="toggleAuth()">Register</span>';
+  document.getElementById('auth-err').textContent = '';
+}
+
+async function authSubmit() {
+  const username = document.getElementById('auth-username').value.trim();
+  const password = document.getElementById('auth-password').value;
+  document.getElementById('auth-err').textContent = '';
+
+  try {
+    if (isRegister) {
+      const email = document.getElementById('auth-email').value.trim();
+      const res = await fetch('/api/auth/register', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({username, email, password})
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
+      // auto login after register
+    }
+
+    const form = new URLSearchParams();
+    form.append('username', username); form.append('password', password);
+    const res = await fetch('/api/auth/login', { method:'POST', body:form });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
+    const data = await res.json();
+    token = data.access_token;
+    localStorage.setItem('ct_token', token);
+    showApp();
+  } catch(e) {
+    document.getElementById('auth-err').textContent = e.message || 'Auth failed';
+  }
+}
+
+function showApp() {
+  document.getElementById('auth-wall').style.display = 'none';
+  document.getElementById('main-app').style.display = 'block';
+  document.getElementById('logout-btn').style.display = 'block';
+  loadAll();
+}
+
+function logout() {
+  localStorage.removeItem('ct_token');
+  token = null;
+  document.getElementById('auth-wall').style.display = 'flex';
+  document.getElementById('main-app').style.display = 'none';
+  document.getElementById('logout-btn').style.display = 'none';
+}
+
+function showTab(name, el) {
+  document.getElementById('tab-alerts').style.display = name==='alerts' ? 'block' : 'none';
+  document.getElementById('tab-triage').style.display = name==='triage' ? 'block' : 'none';
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  if(name==='alerts') loadAlerts();
+}
+
+async function loadAll() {
+  loadStats();
+  loadAlerts();
+}
+
+async function loadStats() {
+  try {
+    const r = await fetch('/api/alerts/dashboard', {headers: authHeader()});
+    if(r.status===401){logout();return;}
+    const d = await r.json();
+    document.getElementById('s-total').textContent = d.total_alerts;
+    document.getElementById('s-critical').textContent = d.critical_alerts;
+    document.getElementById('s-high').textContent = d.high_alerts;
+    document.getElementById('s-open').textContent = d.open_alerts;
+    document.getElementById('s-resolved').textContent = d.resolved_today;
+  } catch(e) {}
+}
+
+function riskColor(score) {
+  if(score>=90) return '#ef4444';
+  if(score>=70) return '#f97316';
+  if(score>=45) return '#eab308';
+  return '#22c55e';
+}
+
+async function loadAlerts() {
+  const sev = document.getElementById('f-severity').value;
+  const status = document.getElementById('f-status').value;
+  let url = '/api/alerts/?limit=50';
+  if(sev) url += `&severity=${sev}`;
+  if(status) url += `&status=${status}`;
+
+  try {
+    const r = await fetch(url, {headers: authHeader()});
+    if(r.status===401){logout();return;}
+    const alerts = await r.json();
+    const tbody = document.getElementById('alerts-table-body');
+
+    if(!alerts.length) {
+      tbody.innerHTML = '<tr><td colspan="9" class="empty">No alerts yet. Submit one using the ⚡ tab.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = alerts.map(a => `
+      <tr>
+        <td style="color:var(--muted)">#${a.id}</td>
+        <td>
+          <div style="font-family:monospace;font-size:12px">${a.source_ip}</div>
+          ${a.ip_country ? `<div class="ip-flag">${a.ip_country}${a.ip_abuse_score ? ` · AbuseScore: ${a.ip_abuse_score}` : ''}</div>` : ''}
+        </td>
+        <td><span class="tag">${a.event_type}</span></td>
+        <td style="color:var(--muted);font-size:12px">${a.tool}</td>
+        <td><span class="sev-badge sev-${a.severity}">${a.severity}</span></td>
+        <td>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="risk-bar"><div class="risk-fill" style="width:${a.risk_score}%;background:${riskColor(a.risk_score)}"></div></div>
+            <span style="font-size:12px;color:${riskColor(a.risk_score)};font-weight:700">${a.risk_score}</span>
+          </div>
+        </td>
+        <td class="mitre" style="font-size:11px;max-width:180px">${a.mitre_technique}</td>
+        <td><span class="status-badge status-${a.status.replace(' ','_')}">${a.status}</span></td>
+        <td>
+          <button class="btn btn-outline btn-sm" onclick="openModal(${a.id},'${a.status}')">Update</button>
+        </td>
+      </tr>
+    `).join('');
+  } catch(e) {}
+}
+
+async function submitTriage() {
+  const btn = document.getElementById('triage-btn');
+  btn.innerHTML = '<span class="spinner"></span>';
+  btn.disabled = true;
+  document.getElementById('triage-err').textContent = '';
+  document.getElementById('triage-result').style.display = 'none';
+
+  try {
+    const payload = {
+      source_ip: document.getElementById('t-ip').value.trim(),
+      event_type: document.getElementById('t-type').value,
+      log_message: document.getElementById('t-log').value.trim(),
+      tool: document.getElementById('t-tool').value,
+    };
+    if(!payload.source_ip || !payload.log_message)
+      throw new Error('Fill in Source IP and Log Message');
+
+    const r = await fetch('/api/alerts/triage', {
+      method:'POST', headers: authHeader(), body: JSON.stringify(payload)
+    });
+    if(!r.ok) { const e = await r.json(); throw new Error(e.detail); }
+    const d = await r.json();
+
+    document.getElementById('r-severity-badge').innerHTML =
+      `<span class="sev-badge sev-${d.severity}" style="font-size:14px;padding:5px 14px">${d.severity.toUpperCase()}</span>`;
+    document.getElementById('r-risk').textContent = `${d.risk_score} / 100`;
+    document.getElementById('r-mitre').textContent = d.mitre_technique;
+    document.getElementById('r-tactic').textContent = d.mitre_tactic;
+    document.getElementById('r-ip-score').textContent = d.ip_abuse_score != null ? `${d.ip_abuse_score}%` : 'N/A (no API key)';
+    document.getElementById('r-country').textContent = d.ip_country || '—';
+    document.getElementById('r-action').textContent = d.recommended_action;
+    document.getElementById('triage-result').style.display = 'block';
+
+    loadAll(); // refresh stats
+  } catch(e) {
+    document.getElementById('triage-err').textContent = e.message;
+  } finally {
+    btn.innerHTML = 'Run Triage ⚡';
+    btn.disabled = false;
+  }
+}
+
+function openModal(id, currentStatus) {
+  currentAlertId = id;
+  document.getElementById('modal-id').textContent = id;
+  document.getElementById('modal-status').value = currentStatus;
+  document.getElementById('modal-notes').value = '';
+  document.getElementById('modal').style.display = 'flex';
+}
+
+function closeModal() {
+  document.getElementById('modal').style.display = 'none';
+  currentAlertId = null;
+}
+
+async function saveUpdate() {
+  try {
+    const r = await fetch(`/api/alerts/${currentAlertId}`, {
+      method:'PATCH', headers: authHeader(),
+      body: JSON.stringify({
+        status: document.getElementById('modal-status').value,
+        analyst_notes: document.getElementById('modal-notes').value,
+      })
+    });
+    if(!r.ok) throw new Error('Update failed');
+    closeModal();
+    loadAll();
+  } catch(e) { alert(e.message); }
+}
+
+// Boot
+if(token) { showApp(); } else {
+  document.getElementById('auth-wall').style.display = 'flex';
+}
+</script>
+</body>
+</html>
